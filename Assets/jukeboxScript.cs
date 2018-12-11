@@ -34,6 +34,7 @@ public class jukeboxScript : MonoBehaviour
 		static int moduleIdCounter = 1;
 		int moduleId;
 		private string TwitchHelpMessage = "Type '!{0} press 321' (1 = top; 2 = middle; 3 = bottom.)";
+    private static bool isPlaying;
 
 		private void Shuffle<T>(IList<T> list)
 		{
@@ -79,6 +80,7 @@ public class jukeboxScript : MonoBehaviour
 
 		void Awake ()
 		{
+                isPlaying = false;
 				moduleId = moduleIdCounter++;
 				button1.OnInteract += delegate () { ButtonPress(randomLyrics[0], button1Rend); return false; };
 				button2.OnInteract += delegate () { ButtonPress(randomLyrics[1], button2Rend); return false; };
@@ -563,4 +565,40 @@ public class jukeboxScript : MonoBehaviour
 				lyricOptions.Add("Down");
 		}
 
+    private IEnumerator TwitchHandleForcedSolve()
+    {
+        StartCoroutine(AutoSolve());
+        yield return null;
+    }
+
+    private IEnumerator AutoSolve()
+    {
+        chosenLyrics.Clear();
+        var renderers = new[] { button1Rend, button2Rend, button3Rend };
+        if (renderers.Any(x => x.material.mainTexture == vinylPass))
+        {
+            Debug.LogFormat("[Jukebox #{0}] Autosolve is requesting a new solution", moduleId);
+            Start();
+        }
+        var order = new[] { randomLyrics.IndexOf(lyricOptions[0]), randomLyrics.IndexOf(lyricOptions[1]), randomLyrics.IndexOf(lyricOptions[2]) };
+        var buttons = new[] { button1, button2, button3 };
+        for (int i = 0; i < 2; i++)
+        {
+            buttons[order[i]].OnInteract();
+            yield return new WaitForSeconds(0.2f);
+        }
+        if (isPlaying) yield return new WaitUntil(() => !isPlaying);
+        GetComponent<KMAudio>().PlayGameSoundAtTransform(KMSoundOverride.SoundEffect.ButtonPress, transform);
+        GetComponent<KMSelectable>().AddInteractionPunch();
+        Audio.PlaySoundAtTransform("recordScratch1", transform);
+        chosenLyrics.Add(lyricOptions[2]);
+        renderers[order[2]].material.mainTexture = vinylPass;
+        isPlaying = true;
+        Audio.PlaySoundAtTransform("losingHorn", transform);
+        GetComponent<KMBombModule>().HandlePass();
+        var c = Bomb.GetModuleNames().Where(x => x == "The Jukebox").Count() - 1;
+        c = c == 0 ? 1 : c;
+        yield return new WaitForSeconds(4.0f / c);
+        isPlaying = false;
+    }
 }
